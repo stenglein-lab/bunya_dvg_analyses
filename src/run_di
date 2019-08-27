@@ -1,0 +1,60 @@
+#!/bin/bash
+
+id=$1
+
+# make a merged R1/R2 fastq file
+cat ${id}_R1_fuh.fastq ${id}_R2_fuh.fastq > ${id}_R12_fuh.fastq 
+
+for seg in S M L
+do
+   grep -A 1 ${id}_${seg} ${id}.fa > ${id}_${seg}.fa
+   bwa index ${id}_${seg}.fa
+   python3 DI-tector_06.py ${id}_${seg}.fa ${id}_R12_fuh.fastq  -o ${id}_${seg}_DItect -t DI -x 12 -p 1 -n 4 -l 10 
+done
+
+
+
+# usage: DI-tector_06.py [-h] [-g HOST_REF] [-s MIN_SEGMENT] [-m MIN_MAPQ]
+#                        [-n NB_READS] [-o OUTPUT_DIRECTORY] [-t TAG] [-d]
+#                        [-l INDEL_LENGTH] [-f] [-p POLARITY] [-q] [-k]
+#                        [-x NB_THREADS]
+#                        Virus_Ref Input_Data
+# 
+# positional arguments:
+#   Virus_Ref             Virus genome reference sequence in FASTA format.
+#   Input_Data            File containing single reads in FASTQ format.
+# 
+# optional arguments:
+#   -h, --help            show this help message and exit
+#   -g HOST_REF, --Host_Ref HOST_REF
+#                         Host genome reference sequence in FASTA format.
+#   -s MIN_SEGMENT, --Min_Segment MIN_SEGMENT
+#                         Minimum segment length. Default is 15.
+#   -m MIN_MAPQ, --Min_MAPQ MIN_MAPQ
+#                         Skip alignments with MAPQ smaller than INT. Default is
+#                         25.
+#   -n NB_READS, --Nb_Reads NB_READS
+#                         Show only DVGs with counts reads > or egal to INT.
+#                         Default is 2.))
+#   -o OUTPUT_DIRECTORY, --Output_Directory OUTPUT_DIRECTORY
+#                         Enter a directory name that all compiled output files
+#                         will be saved in.
+#   -t TAG, --Tag TAG     Enter a tag name that will be appended before each
+#                         output file. Default is 'DI-tector'.
+#   -d, --DVG_sequences   Generate multi-fasta file with DVG sequences. Default
+#                         is (OFF).
+#   -l INDEL_LENGTH, --InDel_Length INDEL_LENGTH
+#                         Skip alignments with size of InDels smaller or egal to
+#                         INT. Default size is 1.
+#   -f, --Fasta           Select '-f' if data is in FASTA format fasta. Default
+#                         is FASTQ.
+#   -p POLARITY, --Polarity POLARITY
+#                         [0] Positive strand genome / [1] Negative strand
+#                         genome. Default is 0.
+#   -q, --No_Quantification
+#                         Inactive percentage quantification. Quantification
+#                         need bedtools Default is (ON).
+#   -k, --Keep_files      Keep intermediaite files (i.e. alignment etc...).
+#                         Default is (OFF).
+#   -x NB_THREADS, --Nb_threads NB_THREADS
+#                         Number of threads. Default is 1.

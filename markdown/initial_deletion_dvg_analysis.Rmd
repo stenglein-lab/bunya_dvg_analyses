@@ -1,0 +1,146 @@
+---
+title: "DVG analysis computational lab notebook"
+author: "Mark Stenglein"
+date: "27/8/2019"
+output:
+  html_document: default
+  classoption: landscape
+  pdf_document: default
+  rmarkdown::pdf_document:
+    fig_caption: yes
+    includes:
+      in_header: preamble-latex.tex
+---
+
+```{r message=FALSE, warning=FALSE}
+# This code chunk will setup line wrapping in code chunks
+library(knitr)
+opts_chunk$set(tidy.opts=list(width.cutoff=60),tidy=TRUE)
+library(tidyverse)
+```
+
+### Location
+
+This analysis is being done on cctsi-104.cvmbs.colostate.edu in the directories
+
+/home/mdstengl/datasets/bunyas/bunya_dvg_analyses
+
+(This directory corresponds to an R studio project and a github repository.)
+
+and
+
+/home/mdstengl/datasets/bunyas/dip
+
+I ran DI-tector and associated scripts in the dip directory and the R scripts are in the bunya_dvg_analyses directory .
+
+## Overview / introduction
+
+This lab notebook describes analyses to explore and visualize internal deletion DVGs in the bunyavirus genome sequencing datasets.  
+
+### Analysis outline
+
+- Collect host- and quality-filtered datasets for all bunyaviruses.
+- Run DI-tector to quantify DVGs for each genome segment (3 per virus)
+- Consolidate DI-tector output
+- Import DI-tector output into R, along with some other data such as the # of reads per dataset
+- Visualize DVG data in various ways
+
+### Datasets
+
+The datasets are from 104 bunyaviruses and are 2x150 paired end NextSeq data.  The names of the viruses (and the names of the datasets) are in a file named `virus_names.txt`.
+
+The datasets have been pre-processed to (1) remove low quality reads or parts of reads, (2) collapse to unique sequences, and (3) filter host-derived reads.  These filtered datasets are named virus_name_R1_fuh.fastq and virus_name_R2_fuh.fastq.  (fuh: (quality)-Filtered Unique Host-filtered).   This is our standard pre-processing pipeline.  See [this script](https://github.com/stenglein-lab/taxonomy_pipeline/blob/master/run_preprocessing_pipeline_one_sample) for more detail
+
+
+### DI-tector
+
+DI-tector is a tool for detecting various types of DVGs in NGS data.  The paper is [here](https://www.ncbi.nlm.nih.gov/pubmed/30012569).
+
+There is a web interface for DI-tector [here](http://www.di-tector.cyame.eu/), from where you can also download it as a python script.
+
+*Running DI-tector:*
+
+I ran DI-tector using a helper script, [run_di](../src/run_di)
+
+This script concatenates the R1 and R2 paired reads files into a single _R12_ file and then runs DI-tector for each of the 3 genome segments for each virus.  The genome segment sequences are in an appropriately named fasta files with one fasta file per segment (e.g. Yaba_7_S.fa  Yaba_7_M.fa ...)  
+
+I used [simple_scheduler](https://github.com/stenglein-lab/stenglein_lab_scripts/blob/master/simple_scheduler) to run the run_di script on all the datasets as follows:
+
+```
+# in directory mdstengl@cctsi-104:~/datasets/bunyas/dip
+simple_scheduler -a 4 ./run_di `cat virus_names.txt` 
+```
+
+This produced 3 output directories for each virus, e.g. for Yaba_7 virus: Yaba_7_S_DItect/, Yaba_7_M_DItect/,  and Yaba_7_L_DItect/
+
+In each of these directories, the main output of DI-tector that we are interested in a file named DI_counts.txt
+
+I consolidated the DI-tector output by running:
+
+```
+./collect_di_counts
+```
+
+[collect_di_counts](../src/collect_di_counts) is this bash script:
+
+```
+#!/bin/bash
+
+find . -name DI_counts.txt  -exec grep 'DVG' {} \;  | grep -v -e "^=" -e "DVG's" > di_counts_uncollapsed.txt
+./collapse_similar_dvg di_counts_uncollapsed.txt > di_counts.txt
+```
+
+
+The first line of this script finds all the files named DI_counts.txt (in all the new subdirectories), then greps for the text 'DVG' in those files, then pipes those lines to another grep that excludes lines that begin with = (^=) or that contain the text "DVG's" (these are header lines).  The remaining lines with actual DVG info are output to di_counts_uncollapsed.txt
+
+This file is then run through the [collapse_similar_dvg](../src/collapse_similar_dvg) script and the output sent to di_counts.xt
+
+[collapse_similar_dvg](../src/collapse_similar_dvg) is a perl script that reads through the DI-tector output and merges any DVGs whose breakpoints are sufficiently close.  The assumption underlying this is that there is some imprecision in identifying exactly where the breakpoint occurred (for instance if there are repeated bases flanking the breakpoint junction), and that DVGs with close breakpoint junctions are the same DVG and should be consolidated into one DVG.  See this script for more info on how this consolidation was implemented.
+
+This file, di_counts.txt, is the input to several R scripts to visualize DVGs in various ways.  
+
+### Calculation of total read coverage
+
+Total coverage is the coverage of virus-mapping reads in the entire dataset.  These reads come from full-length genomes and the various types of DVGs.  Depth for individual viruses is in files named virus_name.depth, e.g. Yaba_7.depth.  To collect depth data for all viruses in one file, run:
+
+```
+# run in mdstengl@cctsi-104:~/datasets/bunyas/all_sequences_1_11_19
+cat *.depth > all.depth
+
+# copy it to the R Studio Project
+cp all.depth ../bunya_dvg_analyses/data
+```
+
+### Calculation of split read coverage
+
+Split read coverage is the coverage just from reads that were identified by DI-tector as mapping across breakpoint junctions.  To collect a file containing all split read coverage, run:
+
+```
+# run in directory mdstengl@cctsi-104:~/datasets/bunyas/dip
+
+# this find command finds all DI_output_sorted.txt (DI-tector output files in each sub-directory) and greps for Deletion in them
+find . -name DI_output_sorted.txt  -exec grep 'Deletion' {} \;    > all_di_output_sorted.txt
+
+# convert this DI-tector output to a tidy-formatted data table for all segment split read coverage
+./tabulate_split_coverage < all_di_output_sorted.txt  > all_split_read_coverage.txt
+
+# copy to R project dir.
+cp all_split_read_coverage.txt ../bunya_dvg_analyses/data
+```
+
+[tabulate_split_coverage](../src/tabulate_split_coverage) is a perl script that processes DI-tector output.
+
+
+### Visualization scripts
+
+In the directory: /home/mdstengl/datasets/bunyas/all_sequences_1_11_19
+
+See the following scripts in the [src directory](../src/):
+
+- [import_and_tidy_dvg_data.R](../src/import_and_tidy_dvg_data.R) --> import data and conver to tidy format |
+- [plot_deletion_dvgs.R](../src/plot_deletion_dvgs.R)       --> plot a summary of DVGs one segment at a time (Panels B-E) |
+- [plot_dvg_summary.R](../src/plot_dvg_summary.R)           --> plot visual summary of all DVGs (Panel F) |
+- [calculate_dvg_coverage.R](../src/calculate_dvg_coverage.R)  --> calculate and visualize relative DVG abundances (Panel G) |
+
+
+

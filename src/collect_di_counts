@@ -1,0 +1,4 @@
+#!/bin/bash
+
+find . -name DI_counts.txt  -exec grep 'DVG' {} \;  | grep -v -e "^=" -e "DVG's" > di_counts_uncollapsed.txt
+./collapse_similar_dvg di_counts_uncollapsed.txt > di_counts.txt

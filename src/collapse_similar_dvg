@@ -1,0 +1,148 @@
+#!/usr/bin/env perl
+
+use strict;
+use Getopt::Long;
+
+my $print_usage = 0;
+
+my $usage = <<USAGE;
+
+  This script collapses deletion containing DVGs with similar bp/ri values
+
+  I.e. it assumes these derive from the same actual DVG and collapses them.
+
+  Mark Stenglein,  2/18/2019
+
+  Usage: $0 [-h] 
+
+   [-h]          print this message
+
+USAGE
+
+if ((scalar @ARGV == 0) and -t STDIN) { print $usage and exit; }
+
+GetOptions ("h" => \$print_usage);
+
+my %dvgs = ();
+my $dvg_counter = 0;
+my %dvgs_by_ref = ();
+
+while (<>)
+{
+   chomp;
+   my @fields = split "\t";
+   if (scalar @fields != 8) 
+   {
+      warn "error: was expecting 8 fields.  Invalid line: $_\n";
+      exit;
+   }
+
+   # my ($type, $len, $bp, $ri, $delta, $ref, $counts,  $pct) = @fields;
+   check_dvg(\%dvgs, \@fields);
+}
+
+# output the ones that made it through
+my @dvg_indexes = sort {$dvgs{$a}{i} <=> $dvgs{$b}{i}} keys %dvgs;
+foreach my $dvg_index (@dvg_indexes)
+{
+   my $bp = $dvgs{$dvg_index}{bp};
+   my $ri = $dvgs{$dvg_index}{ri};
+   my $type = $dvgs{$dvg_index}{type};
+   my $len = $dvgs{$dvg_index}{len};
+   my $delta = $dvgs{$dvg_index}{delta};
+   my $ref = $dvgs{$dvg_index}{ref};
+   my $counts = $dvgs{$dvg_index}{counts};
+   my $pct = $dvgs{$dvg_index}{pct};
+   print "$type\t$len\t$bp\t$ri\t$delta\t$ref\t$counts\t$pct\n";
+}
+
+
+sub check_dvg
+{
+   # euclidean distance bp/ri cutoff
+   my $dist_thresh = 8;
+
+   my $hash_ref = shift;
+   my $fields_ref = shift;
+   my ($type, $len, $bp, $ri, $delta, $ref, $counts,  $pct) = @{$fields_ref};
+   # warn "$bp, $ri, $type\n";
+
+   my $collapsed_with_existing = 0;
+
+   # my @dvg_indexes = keys %{$hash_ref};
+
+   # only compare to dvgs for this ref seq
+   if (defined $dvgs_by_ref{$ref})
+   {
+      # for all of the DVGs already logged 
+      my @dvg_indexes = @{$dvgs_by_ref{$ref}};
+      foreach my $dvg_index (@dvg_indexes)
+      {
+         my $dvg_type = $$hash_ref{$dvg_index}{type};
+         if ($type ne $dvg_type)
+         {
+            # this is a different type of DVG so don't have to worrry about collapsing
+            next;
+         }
+         my $dvg_bp = $$hash_ref{$dvg_index}{bp};
+         my $dvg_ri = $$hash_ref{$dvg_index}{ri};
+         # calculate euclidean distance between bp & ri for this dvg and all existing ones
+         my $ed = sqrt( ($dvg_bp - $bp)**2 + ($dvg_ri - $ri)**2 );
+         if ($ed <= $dist_thresh)
+         {
+            # warn "collapsing: $bp/$ri -> $dvg_bp/$dvg_ri = $ed\n";
+            # these are sufficiently close to collapse
+            # which has a higher count?
+            my $dvg_counts = $$hash_ref{$dvg_index}{counts};
+            if ($dvg_counts >= $counts)
+            {
+               # the existing one is higher
+               # add this new ones counts to the tally
+               $$hash_ref{$dvg_index}{counts} += $counts;
+            }
+            else
+            {
+               # replace existing DVG in hash with this one that has a higher count
+               $$hash_ref{$dvg_index}{counts} += $counts;
+               $$hash_ref{$dvg_index}{bp} = $bp;
+               $$hash_ref{$dvg_index}{ri} = $ri;
+               $$hash_ref{$dvg_index}{line} = [@{$fields_ref}];
+            }
+            $collapsed_with_existing = 1;
+            last;
+         }
+         elsif ($ed < 20)
+         {
+            # warn "almost collapsed: $bp/$ri -> $dvg_bp/$dvg_ri = $ed\n";
+         }
+      }
+   }
+   if (!$collapsed_with_existing)
+   {
+      # add this DVG to the hash
+      my $dvg_index = "$ref.$bp.$ri.$type";
+
+      # just use a counter as a hash index 
+      # my $dvg_index = scalar @dvg_indexes;
+
+      if (defined $$hash_ref{$dvg_index})
+      {
+         warn "error: already a hash entry for $dvg_index\n";
+         exit;
+      }
+      $$hash_ref{$dvg_index}{bp} = $bp;
+      $$hash_ref{$dvg_index}{ri} = $ri;
+      $$hash_ref{$dvg_index}{type} = $type;
+      $$hash_ref{$dvg_index}{len} = $len;
+      $$hash_ref{$dvg_index}{delta} = $delta;
+      $$hash_ref{$dvg_index}{ref} = $ref;
+      $$hash_ref{$dvg_index}{counts} = $counts;
+      $$hash_ref{$dvg_index}{pct} = $pct;
+      $$hash_ref{$dvg_index}{i} = $dvg_counter;
+      push @{$dvgs_by_ref{$ref}}, $dvg_index;
+      $dvg_counter += 1;
+      # $$hash_ref{$dvg_index}{line} = [@{$fields_ref}];
+   }
+}
+
+

@@ -1,2 +1,3 @@
 # bunya_dvg_analyses
-Analyses of DVG forms in ~100 bunyavirus datasets
+This repository contains data and scripts used to analyze DVGs (defective viral genomes) in ~100 bunyavirus datasets.
+

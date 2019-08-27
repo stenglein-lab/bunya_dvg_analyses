@@ -1,0 +1,71 @@
+#!/usr/bin/env perl
+
+use strict;
+use Getopt::Long;
+
+my $print_usage = 0;
+
+my $usage = <<USAGE;
+
+  This script takes DI-tect sorted output and outputs coverage levels for 'split' reads
+
+  Mark Stenglein,  2/7/2019
+
+  Usage: $0 [-h] 
+
+   [-h]          print this message
+
+USAGE
+
+if ((scalar @ARGV == 0) and -t STDIN) { print $usage and exit; }
+
+GetOptions ("h" => \$print_usage);
+
+print ("segment\tposition\tsplit_depth\n");
+
+my %segs = ();
+
+while (<>)
+{
+   chomp;
+   my @fields = split "\t";
+   my $lpos = $fields[2];
+   my $rpos = $fields[3];
+   my $segment = $fields[8];
+   my $lmatches = $fields[12];
+   my $rmatches = $fields[13];
+   for (my $p = $lpos-$lmatches+1; $p < $lpos ; $p++)
+   {
+      # increment depth by 1 at that position for that segment
+      $segs{$segment}{$p} += 1;
+   }
+   for (my $p = $rpos; $p < ($rpos + $rmatches); $p++)
+   {
+      # increment depth by 1 at that position for that segment
+      $segs{$segment}{$p} += 1;
+   }
+}
+
+
+foreach my $segment (keys %segs)
+{
+   # figure out last position and zero out coverage array before that
+   my @positions = keys {%{$segs{$segment}}};
+   my @sorted_positions = sort { $a <=> $b } @positions;
+   my $max_p = $sorted_positions[-1];
+
+   # foreach my $p (keys %{$segs{$segment}})
+   for (my $p = 1; $p < $max_p; $p++)
+   {
+      if (defined $segs{$segment}{$p}) 
+      {
+         print "$segment\t$p\t$segs{$segment}{$p}\n";
+      }
+      else
+      {
+         print "$segment\t$p\t0\n";
+      }
+   }
+}
+
+
