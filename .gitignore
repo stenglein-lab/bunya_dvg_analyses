@@ -2,3 +2,9 @@
 .Rhistory
 .RData
 .Ruserdata
+*.swp
+*.pdf
+*.fastq
+*.fasta
+*.fq
+*.fa
